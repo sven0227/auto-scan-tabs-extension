@@ -101,6 +101,71 @@ function findGitHubProfileLink() {
   return null;
 }
 
+/**
+ * Find the "View profile" link inside the GitHub section.
+ * Tries: span.title "GitHub" → .view-profile a; then any "View profile" link near GitHub text.
+ * @returns {HTMLAnchorElement | null}
+ */
+function findGitHubViewProfileButton() {
+  const viewProfileText = /view\s*profile/i;
+
+  // 1. Section with span.title "GitHub" → .view-profile a (exact structure from req)
+  const spans = document.querySelectorAll('span.title');
+  for (const span of spans) {
+    if ((span.textContent || '').trim() !== 'GitHub') continue;
+    const section = span.closest('[class*="grid-container"], [class*="py-4x"], [class*="px-0"]') || span.closest('div');
+    if (!section) continue;
+    const viewProfile = section.querySelector('.view-profile a');
+    if (viewProfile && viewProfileText.test((viewProfile.textContent || '').trim())) return viewProfile;
+    const anyViewLink = section.querySelector('a.up-n-link, a[class*="link"]');
+    if (anyViewLink && viewProfileText.test((anyViewLink.textContent || '').trim())) return anyViewLink;
+  }
+
+  // 2. Any "View profile" link that has an ancestor whose text contains "GitHub"
+  const allLinks = document.querySelectorAll('a');
+  for (const a of allLinks) {
+    if (!viewProfileText.test((a.textContent || '').trim())) continue;
+    let parent = a.parentElement;
+    for (let d = 0; d < 20 && parent; d++, parent = parent.parentElement) {
+      if ((parent.textContent || '').includes('GitHub')) return a;
+    }
+  }
+
+  // 3. Any a with text "View profile" and class containing "link", inside a div that has "GitHub" somewhere above
+  for (const a of document.querySelectorAll('a.up-n-link, a[class*="no-underline"]')) {
+    if (!viewProfileText.test((a.textContent || '').trim())) continue;
+    let parent = a.parentElement;
+    let depth = 0;
+    while (parent && depth < 15) {
+      if ((parent.textContent || '').includes('GitHub')) return a;
+      parent = parent.parentElement;
+      depth++;
+    }
+  }
+
+  return null;
+}
+
+/**
+ * Scroll element into view and click once. Only use link.click() so the page's
+ * handler runs once (dispatching multiple events was opening two GitHub tabs).
+ */
+function scrollAndClick(el) {
+  el.scrollIntoView({ behavior: 'instant', block: 'center' });
+  el.click();
+}
+
+/**
+ * Click the "View profile" button in the GitHub section. The page's JS will open GitHub (e.g. new tab).
+ * @returns {boolean} true if the button was found and clicked
+ */
+function clickGitHubViewProfileButton() {
+  const btn = findGitHubViewProfileButton();
+  if (!btn) return false;
+  scrollAndClick(btn);
+  return true;
+}
+
 function isFreelancerProfilePage() {
   return /upwork\.com\/freelancers\//.test(window.location.href);
 }
@@ -147,5 +212,25 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
     sendResponse({ link });
     return true;
   }
+  if (msg.type === 'HAS_GITHUB_VIEW_PROFILE_BUTTON') {
+    const hasButton = isFreelancerProfilePage() && !!findGitHubViewProfileButton();
+    sendResponse({ hasButton });
+    return false;
+  }
+  if (msg.type === 'CLICK_GITHUB_VIEW_PROFILE') {
+    if (!isFreelancerProfilePage()) {
+      sendResponse({ clicked: false });
+      return false;
+    }
+    const delayBeforeClickMs = 300;
+    setTimeout(() => {
+      const clicked = clickGitHubViewProfileButton();
+      sendResponse({ clicked });
+    }, delayBeforeClickMs);
+    return true;
+  }
   return false;
 });
+
+// No auto-click: only "Open GitHub on all profile tabs" (batch) or popup "Click View profile" trigger the click,
+// so we avoid double-click and "flag set by auto-click blocks batch" issues.

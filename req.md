@@ -18,7 +18,7 @@ upwork is protected by cloudflare challenge, if it shows challenge, can you pass
 on each freelancers profile, there may be a button that redirects to github profile page on a new page.
 The goal is to get the github profile links.
 
-The github button element is looking like this
+The github button element is looking like this, you should click on View Profile button
 
 <div data-v-7bffef5a="" class="py-4x"><div data-v-396e9190="" data-v-7bffef5a="" class="px-0 pt-0"><div data-v-396e9190="" class="air3-grid-container gap-0"><div data-v-396e9190="" class="span-8"><span data-v-396e9190="" class="title">
         GitHub
@@ -33,3 +33,7 @@ The github button element is looking like this
       2
       followers
     </div> <!----></div></div> <!----> <!----></div>
+
+after clicking on the View Profile button, it opens github profile page on a new tab, it should get url from the new tab
+
+after open 10 profiles of freelancers, it can scan opened tabs and if it is freelance profile page, find View Profile button and click on it to open github pages
