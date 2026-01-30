@@ -301,7 +301,8 @@ async function exportGitHubUrlsToCsv() {
   const objectUrl = URL.createObjectURL(blob);
   const a = document.createElement('a');
   a.href = objectUrl;
-  a.download = `upwork-github-urls-${new Date().toISOString().slice(0, 10)}.csv`;
+  const ts = new Date().toISOString().slice(0, 19).replace(/:/g, '-');
+  a.download = `upwork-github-urls-${ts}.csv`;
   a.click();
   URL.revokeObjectURL(objectUrl);
   setStatus(`Generated CSV with ${rows.length} row(s).`);
