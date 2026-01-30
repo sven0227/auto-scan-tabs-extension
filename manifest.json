@@ -1,0 +1,32 @@
+{
+  "manifest_version": 3,
+  "name": "Upwork Talent Searcher",
+  "version": "1.0.0",
+  "description": "Scan Upwork talent search pages and open freelancer profile links in new tabs",
+  "permissions": [
+    "activeTab",
+    "scripting",
+    "tabs"
+  ],
+  "host_permissions": [
+    "https://www.upwork.com/*"
+  ],
+  "action": {
+    "default_popup": "popup.html"
+  },
+  "content_scripts": [
+    {
+      "matches": ["https://www.upwork.com/nx/search/talent/*"],
+      "js": ["content.js"],
+      "run_at": "document_idle"
+    },
+    {
+      "matches": ["https://www.upwork.com/freelancers/*"],
+      "js": ["content.js"],
+      "run_at": "document_idle"
+    }
+  ],
+  "background": {
+    "service_worker": "background.js"
+  }
+}

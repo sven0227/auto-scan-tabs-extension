@@ -1,0 +1,40 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>Upwork Searcher</title>
+  <link rel="stylesheet" href="popup.css">
+</head>
+<body>
+  <div class="popup">
+    <h1>Upwork Searcher</h1>
+    <p class="hint" id="pageHint">Use this on an Upwork talent search or freelancer profile page.</p>
+
+    <div id="status" class="status"></div>
+
+    <!-- Talent search page -->
+    <div id="searchSection" class="section">
+      <div class="actions">
+        <button id="scan" type="button">Scan this page</button>
+        <button id="openTabs" type="button" disabled>Open all in new tabs</button>
+        <button id="nextPage" type="button">Next page</button>
+      </div>
+      <ul id="linkList" class="link-list"></ul>
+    </div>
+
+    <!-- Freelancer profile page: GitHub -->
+    <div id="githubSection" class="section" style="display: none;">
+      <div class="actions">
+        <button id="scanGitHub" type="button">Get GitHub link</button>
+        <button id="openGitHub" type="button" disabled>Open GitHub profile</button>
+      </div>
+      <p id="githubLinkDisplay" class="github-link"></p>
+    </div>
+
+    <p class="cloudflare-hint">
+      If you see a Cloudflare challenge, complete it in the tab and try again.
+    </p>
+  </div>
+  <script src="popup.js"></script>
+</body>
+</html>
