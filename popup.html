@@ -1,45 +1,63 @@
 <!DOCTYPE html>
 <html>
-<head>
-  <meta charset="utf-8">
-  <title>Upwork Searcher</title>
-  <link rel="stylesheet" href="popup.css">
-</head>
-<body>
-  <div class="popup">
-    <h1>Upwork Searcher</h1>
-    <p class="hint" id="pageHint">Use this on an Upwork talent search or freelancer profile page.</p>
+  <head>
+    <meta charset="utf-8" />
+    <title>Upwork Searcher</title>
+    <link rel="stylesheet" href="popup.css" />
+  </head>
+  <body>
+    <div class="popup">
+      <h1>Upwork Searcher</h1>
+      <p class="hint" id="pageHint">
+        Use this on an Upwork talent search or freelancer profile page.
+      </p>
 
-    <div id="status" class="status"></div>
+      <div id="status" class="status"></div>
 
-    <!-- Talent search page -->
-    <div id="searchSection" class="section">
-      <div class="actions">
-        <button id="scan" type="button">Scan this page</button>
-        <button id="openTabs" type="button" disabled>Open all in new tabs</button>
-        <button id="nextPage" type="button">Next page</button>
+      <!-- Talent search page -->
+      <div id="searchSection" class="section">
+        <div class="actions">
+          <button id="scan" type="button">Scan this page</button>
+          <button id="openTabs" type="button" disabled>
+            Open all in new tabs
+          </button>
+          <button id="nextPage" type="button">Next page</button>
+        </div>
+        <div class="actions">
+          <button id="scanOpen10Next" type="button" class="primary">
+            Scan, open 10, next page
+          </button>
+          <button id="scanOpen10NextSix" type="button">
+            Do that 6× (15s between)
+          </button>
+        </div>
+        <div class="actions">
+          <button id="openGitHubOnAllProfileTabs" type="button" class="primary">
+            Open GitHub on all profile tabs
+          </button>
+          <button id="exportGitHubCsv" type="button">Generate CSV file</button>
+        </div>
+        <ul id="linkList" class="link-list"></ul>
       </div>
-      <div class="actions">
-        <button id="openGitHubOnAllProfileTabs" type="button" class="primary">Open GitHub on all profile tabs</button>
-        <button id="exportGitHubCsv" type="button">Generate CSV file</button>
+
+      <!-- Freelancer profile page: GitHub -->
+      <div id="githubSection" class="section" style="display: none">
+        <div class="actions">
+          <button id="clickViewProfile" type="button" class="primary">
+            Click View profile
+          </button>
+          <button id="scanGitHub" type="button">Get GitHub link</button>
+          <button id="openGitHub" type="button" disabled>
+            Open GitHub profile
+          </button>
+        </div>
+        <p id="githubLinkDisplay" class="github-link"></p>
       </div>
-      <ul id="linkList" class="link-list"></ul>
+
+      <p class="cloudflare-hint">
+        If you see a Cloudflare challenge, complete it in the tab and try again.
+      </p>
     </div>
-
-    <!-- Freelancer profile page: GitHub -->
-    <div id="githubSection" class="section" style="display: none;">
-      <div class="actions">
-        <button id="clickViewProfile" type="button" class="primary">Click View profile</button>
-        <button id="scanGitHub" type="button">Get GitHub link</button>
-        <button id="openGitHub" type="button" disabled>Open GitHub profile</button>
-      </div>
-      <p id="githubLinkDisplay" class="github-link"></p>
-    </div>
-
-    <p class="cloudflare-hint">
-      If you see a Cloudflare challenge, complete it in the tab and try again.
-    </p>
-  </div>
-  <script src="popup.js"></script>
-</body>
+    <script src="popup.js"></script>
+  </body>
 </html>
