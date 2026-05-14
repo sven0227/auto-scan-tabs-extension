@@ -1,5 +1,5 @@
 /**
- * Popup UI: scan current tab for profile links, open them, next page; on profile page get GitHub link.
+ * Side panel UI: scan current tab for profile links, open them, next page; on profile page get GitHub link.
  */
 
 const statusEl = document.getElementById("status");
@@ -474,13 +474,13 @@ clickViewProfileBtn.addEventListener("click", clickViewProfile);
 scanGitHubBtn.addEventListener("click", scanForGitHub);
 openGitHubBtn.addEventListener("click", openGitHubProfile);
 
-// Auto-scan when popup opens if we're on the right page
-(async () => {
+async function refreshForActiveTab() {
   const tab = await getCurrentTab();
   showSectionForTab(tab);
   if (isUpworkTalentSearchTab(tab)) {
     scanPage();
   } else if (isUpworkFreelancerProfileTab(tab)) {
+    setGitHubLink(null);
     await scanForGitHub();
     const lastUrl = await getLastGitHubUrlFromBackground();
     if (lastUrl && !lastGitHubLink) {
@@ -491,4 +491,26 @@ openGitHubBtn.addEventListener("click", openGitHubProfile);
     setStatus("Open Upwork talent search or a freelancer profile.");
     setLinks([]);
   }
-})();
+}
+
+let refreshDebounceId = null;
+function scheduleRefreshForActiveTab() {
+  if (refreshDebounceId) clearTimeout(refreshDebounceId);
+  refreshDebounceId = setTimeout(() => {
+    refreshDebounceId = null;
+    refreshForActiveTab();
+  }, 150);
+}
+
+chrome.tabs.onActivated.addListener(() => {
+  scheduleRefreshForActiveTab();
+});
+
+chrome.tabs.onUpdated.addListener((tabId, changeInfo) => {
+  if (!changeInfo.url && changeInfo.status !== "complete") return;
+  getCurrentTab().then((active) => {
+    if (active?.id === tabId) scheduleRefreshForActiveTab();
+  });
+});
+
+refreshForActiveTab();

@@ -4,6 +4,16 @@
  * Watches for new GitHub tab after "View profile" click and stores its URL.
  */
 
+function ensureSidePanelOpensOnActionClick() {
+  chrome.sidePanel
+    .setPanelBehavior({ openPanelOnActionClick: true })
+    .catch(() => {});
+}
+
+ensureSidePanelOpensOnActionClick();
+chrome.runtime.onInstalled.addListener(ensureSidePanelOpensOnActionClick);
+chrome.runtime.onStartup.addListener(ensureSidePanelOpensOnActionClick);
+
 let watchingForGitHubTab = false;
 let watchTimeoutId = null;
 

@@ -6,6 +6,7 @@
   "permissions": [
     "activeTab",
     "scripting",
+    "sidePanel",
     "tabs",
     "storage"
   ],
@@ -13,7 +14,10 @@
     "https://www.upwork.com/*"
   ],
   "action": {
-    "default_popup": "popup.html"
+    "default_title": "Upwork Talent Searcher"
+  },
+  "side_panel": {
+    "default_path": "popup.html"
   },
   "content_scripts": [
     {
