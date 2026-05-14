@@ -385,6 +385,16 @@ function isUpworkFreelancerProfileUrl(url) {
   );
 }
 
+/** Freelancer display name from the profile tab title (e.g. "Jane Doe - Title - Upwork" → "Jane Doe"). */
+function extractProfileNameFromUpworkTabTitle(title) {
+  if (!title || typeof title !== "string") return "";
+  let t = title.trim();
+  if (!t) return "";
+  t = t.replace(/\s*[-–—|]\s*upwork\s*$/i, "").trim();
+  const first = t.split(/\s*[-–—|]\s*/)[0]?.trim() ?? t;
+  return first;
+}
+
 function escapeCsvField(s) {
   if (s == null || s === "") return "";
   const str = String(s);
@@ -416,7 +426,11 @@ async function exportGitHubUrlsToCsv() {
       rightTab && rightTab.url && isGitHubProfileUrl(rightTab.url)
         ? rightTab.url
         : "";
-    rows.push({ upwork: upworkTab.url, github: githubUrl });
+    rows.push({
+      profileName: extractProfileNameFromUpworkTabTitle(upworkTab.title),
+      upwork: upworkTab.url,
+      github: githubUrl,
+    });
   }
   if (rows.length === 0) {
     setStatus(
@@ -425,11 +439,12 @@ async function exportGitHubUrlsToCsv() {
     );
     return;
   }
-  const header = "upwork_profile_url,github_url";
+  const header = "profile_name,upwork_profile_url,github_url";
   const csvRows = [
     header,
     ...rows.map(
-      (r) => `${escapeCsvField(r.upwork)},${escapeCsvField(r.github)}`
+      (r) =>
+        `${escapeCsvField(r.profileName)},${escapeCsvField(r.upwork)},${escapeCsvField(r.github)}`
     ),
   ];
   const csv = csvRows.join("\n");
