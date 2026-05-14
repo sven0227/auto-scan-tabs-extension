@@ -439,12 +439,12 @@ async function exportGitHubUrlsToCsv() {
     );
     return;
   }
-  const header = "profile_name,upwork_profile_url,github_url";
+  const header = "upwork_profile_url,github_url,,profile_name";
   const csvRows = [
     header,
     ...rows.map(
       (r) =>
-        `${escapeCsvField(r.profileName)},${escapeCsvField(r.upwork)},${escapeCsvField(r.github)}`
+        `${escapeCsvField(r.upwork)},${escapeCsvField(r.github)},,${escapeCsvField(r.profileName)}`
     ),
   ];
   const csv = csvRows.join("\n");
