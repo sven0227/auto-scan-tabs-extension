@@ -50,8 +50,51 @@ function setLinks(links) {
 }
 
 async function getCurrentTab() {
-  const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
-  return tab;
+  const [focused] = await chrome.tabs.query({
+    active: true,
+    lastFocusedWindow: true,
+  });
+  const [current] = await chrome.tabs.query({
+    active: true,
+    currentWindow: true,
+  });
+  const candidates = [focused, current].filter((tab) => tab?.id);
+  return (
+    candidates.find((tab) => tab.url && tab.url.includes("upwork.com")) ||
+    candidates[0]
+  );
+}
+
+async function readTalentScan(tabId) {
+  await chrome.scripting.executeScript({
+    target: { tabId },
+    files: ["content.js"],
+  });
+  const read = () => {
+    const api = globalThis.__UW_TALENT_SEARCHER_API__;
+    if (!api || !api.scanTalentSearchPage) return { links: [], blocked: false };
+    return api.scanTalentSearchPage();
+  };
+  const [isolated] = await chrome.scripting.executeScript({
+    target: { tabId },
+    func: read,
+  });
+  const fromDom = isolated?.result || { links: [], blocked: false };
+  if (fromDom.links && fromDom.links.length) return fromDom;
+  try {
+    await chrome.scripting.executeScript({
+      target: { tabId },
+      world: "MAIN",
+      files: ["content.js"],
+    });
+    const [mainWorld] = await chrome.scripting.executeScript({
+      target: { tabId },
+      world: "MAIN",
+      func: read,
+    });
+    if (mainWorld?.result?.links?.length) return mainWorld.result;
+  } catch (_) {}
+  return fromDom;
 }
 
 function isUpworkTalentSearchTab(tab) {
@@ -75,11 +118,16 @@ async function scanPage() {
   }
   setStatus("Scanning...");
   try {
-    const res = await chrome.tabs.sendMessage(tab.id, {
-      type: "GET_PROFILE_LINKS",
-    });
+    const res = await readTalentScan(tab.id);
     const links = res?.links ?? [];
     setLinks(links);
+    if (!links.length && res?.blocked) {
+      setStatus(
+        "Cloudflare challenge is showing. Complete it in the tab, then scan again.",
+        true
+      );
+      return;
+    }
     setStatus(
       links.length
         ? `Found ${links.length} profile link(s).`
@@ -124,7 +172,17 @@ async function goToNextPage() {
   }
   setStatus("Going to next page...");
   try {
-    await chrome.tabs.sendMessage(tab.id, { type: "NAVIGATE_NEXT_PAGE" });
+    await chrome.scripting.executeScript({
+      target: { tabId: tab.id },
+      files: ["content.js"],
+    });
+    await chrome.scripting.executeScript({
+      target: { tabId: tab.id },
+      func: () => {
+        const api = globalThis.__UW_TALENT_SEARCHER_API__;
+        window.location.href = api.getUrlForPage(api.getCurrentPageNumber() + 1);
+      },
+    });
     setStatus("Navigating...");
   } catch (e) {
     setStatus("Reload the Upwork page and try again.", true);
@@ -150,12 +208,15 @@ async function runOneScanOpen10Next(tabId) {
     return false;
   }
   try {
-    const res = await chrome.tabs.sendMessage(tab.id, {
-      type: "GET_PROFILE_LINKS",
-    });
+    const res = await readTalentScan(tab.id);
     const links = res?.links ?? [];
     if (links.length === 0) {
-      setStatus("No profile links on this page.", true);
+      setStatus(
+        res?.blocked
+          ? "Cloudflare challenge is showing. Complete it in the tab, then scan again."
+          : "No profile links on this page.",
+        true
+      );
       setLinks([]);
       return false;
     }
@@ -168,7 +229,13 @@ async function runOneScanOpen10Next(tabId) {
         setStatus("Error opening tabs.", true);
       }
     });
-    await chrome.tabs.sendMessage(tab.id, { type: "NAVIGATE_NEXT_PAGE" });
+    await chrome.scripting.executeScript({
+      target: { tabId: tab.id },
+      func: () => {
+        const api = globalThis.__UW_TALENT_SEARCHER_API__;
+        window.location.href = api.getUrlForPage(api.getCurrentPageNumber() + 1);
+      },
+    });
     setStatus(`Opened ${toOpen.length} tab(s), navigating to next page.`);
     return true;
   } catch (e) {

@@ -21,7 +21,7 @@
   },
   "content_scripts": [
     {
-      "matches": ["https://www.upwork.com/nx/search/talent/*"],
+      "matches": ["https://www.upwork.com/nx/search/talent*"],
       "js": ["content.js"],
       "run_at": "document_idle"
     },

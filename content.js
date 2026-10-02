@@ -1,57 +1,262 @@
 /**
  * Content script for Upwork: talent search + freelancer profile pages.
  * Search: finds freelancer profile links. Profile: finds GitHub link in GitHub section.
+ * Wrapped so the side panel can inject this file again on an already-open tab.
  */
+(function () {
 
-const PROFILE_LINK_SELECTORS = [
-  'a.profile-link[data-test="UpLink"][href*="/freelancers/"]',
-  'a.up-n-link.profile-link[href*="/freelancers/"]',
-  'a[href*="/freelancers/~"][class*="profile-link"]',
-];
+const PROFILE_ID_RE = /~([0-9a-f]{8,})/i;
 
 function getBaseUrl() {
   return window.location.origin;
 }
 
-/**
- * Collect all freelancer profile links on the current page.
- * @returns {{ url: string, text: string }[]}
- */
-function findFreelancerProfileLinks() {
-  const base = getBaseUrl();
-  const seen = new Set();
-  const results = [];
+function normText(value) {
+  return (value || '').replace(/\s+/g, ' ').trim();
+}
 
-  for (const selector of PROFILE_LINK_SELECTORS) {
-    const links = document.querySelectorAll(selector);
-    for (const a of links) {
-      const href = a.getAttribute('href');
-      if (!href || !href.includes('/freelancers/')) continue;
-      const fullUrl = href.startsWith('http') ? href : new URL(href, base).href;
-      if (seen.has(fullUrl)) continue;
-      seen.add(fullUrl);
-      results.push({
-        url: fullUrl,
-        text: (a.textContent || '').trim().slice(0, 80),
-      });
+function profileIdFromHref(href) {
+  if (!href || !/freelancer/i.test(href)) return null;
+  const match = String(href).match(PROFILE_ID_RE);
+  return match ? match[1].toLowerCase() : null;
+}
+
+function canonicalProfileUrl(id) {
+  return `${getBaseUrl()}/freelancers/~${id}`;
+}
+
+function isInSiteChrome(el) {
+  return !!el.closest('header, nav, footer');
+}
+
+function labelForProfileLink(el) {
+  const own = normText(el.innerText || el.textContent);
+  if (own && !/^view profile$/i.test(own) && own.length <= 90) return own.slice(0, 80);
+
+  const card = el.closest(
+    'article, li, [data-test*="tile" i], [data-test*="Tile"], [data-ev-label*="tile" i], [class*="freelancer-tile" i], [class*="profile-card" i]'
+  );
+  if (card && normText(card.innerText).length < 4000) {
+    const heading = card.querySelector('h2, h3, h4, h5');
+    const headingText = normText(heading && (heading.innerText || heading.textContent));
+    if (headingText && headingText.length <= 120) return headingText.slice(0, 80);
+  }
+
+  if (/^view profile$/i.test(own)) {
+    let parent = el.parentElement;
+    for (let depth = 0; depth < 5 && parent; depth += 1, parent = parent.parentElement) {
+      if (normText(parent.innerText).length >= 4000) break;
+      const heading = parent.querySelector('h2, h3, h4, h5');
+      const headingText = normText(heading && (heading.innerText || heading.textContent));
+      if (headingText && headingText.length <= 120) return headingText.slice(0, 80);
     }
   }
 
-  // Fallback: any link whose href matches /freelancers/~...
-  if (results.length === 0) {
-    document.querySelectorAll('a[href*="/freelancers/~"]').forEach((a) => {
-      const href = a.getAttribute('href');
-      const fullUrl = href.startsWith('http') ? href : new URL(href, base).href;
-      if (seen.has(fullUrl)) return;
-      seen.add(fullUrl);
-      results.push({
-        url: fullUrl,
-        text: (a.textContent || '').trim().slice(0, 80),
-      });
+  return own.slice(0, 80);
+}
+
+function addProfile(seen, results, href, text) {
+  const id = profileIdFromHref(href);
+  if (!id) return;
+  const label = normText(text).slice(0, 80);
+  if (seen.has(id)) {
+    if (!label || /^view profile$/i.test(label)) return;
+    const existing = results.find((item) => item.url.endsWith(`/~${id}`));
+    if (
+      existing &&
+      (!existing.text || /^view profile$/i.test(existing.text) || existing.text === `~${id}`)
+    ) {
+      existing.text = label;
+    }
+    return;
+  }
+  seen.add(id);
+  results.push({
+    url: canonicalProfileUrl(id),
+    text: label || `~${id}`,
+  });
+}
+
+function queryAllDeep(selector, root) {
+  const found = [];
+  const visit = (node) => {
+    if (!node || !node.querySelectorAll) return;
+    node.querySelectorAll(selector).forEach((el) => found.push(el));
+    node.querySelectorAll('*').forEach((el) => {
+      if (el.shadowRoot) visit(el.shadowRoot);
     });
+  };
+  visit(root || document);
+  return found;
+}
+
+/**
+ * Collect freelancer profile links from the rendered search results.
+ * One entry per profile id, so name + "View profile" on the same card count once.
+ * @returns {{ url: string, text: string }[]}
+ */
+const PROFILE_LINK_SELECTOR =
+  'a[href*="/freelancers/"], [href*="/freelancers/"], [data-href*="/freelancers/"], [data-url*="/freelancers/"]';
+
+function collectProfileElements(elements, seen, results) {
+  for (const el of elements) {
+    if (isInSiteChrome(el)) continue;
+    const href = el.getAttribute('href') || el.getAttribute('data-href') || el.getAttribute('data-url');
+    if (!profileIdFromHref(href)) continue;
+    addProfile(seen, results, href, labelForProfileLink(el));
+  }
+  return results;
+}
+
+function findProfilesInDom() {
+  const seen = new Set();
+  const results = [];
+  collectProfileElements(document.querySelectorAll(PROFILE_LINK_SELECTOR), seen, results);
+  if (results.length > 0) return results;
+  collectProfileElements(queryAllDeep(PROFILE_LINK_SELECTOR), seen, results);
+  return results;
+}
+
+function findProfilesInMarkup() {
+  const seen = new Set();
+  const results = [];
+  const root = document.querySelector('main') || document.body;
+  if (!root) return results;
+  const re = /\/freelancers\/(~[0-9a-f]{8,})/gi;
+  const html = root.innerHTML || '';
+  let match = re.exec(html);
+  while (match) {
+    addProfile(seen, results, match[0], '');
+    if (results.length >= 20) break;
+    match = re.exec(html);
+  }
+  return results;
+}
+
+function findProfilesInScripts() {
+  const seen = new Set();
+  const results = [];
+  let blob = '';
+  document.querySelectorAll('script').forEach((script) => {
+    const text = script.textContent || '';
+    if (text.includes('ciphertext') || text.includes('/freelancers/~')) blob += `\n${text}`;
+  });
+  if (!blob) return results;
+
+  const re = /"(?:ciphertext|profileCiphertext|freelancerCiphertext)"\s*:\s*"~?([0-9a-f]{8,})"/gi;
+  let match = re.exec(blob);
+  while (match) {
+    const id = match[1].toLowerCase();
+    const around = blob.slice(Math.max(0, match.index - 500), match.index + 500);
+    const titleMatch = around.match(/"(?:title|shortName|profileName)"\s*:\s*"((?:\\.|[^"\\]){2,160})"/);
+    const title = titleMatch ? titleMatch[1].replace(/\\"/g, '"').replace(/\\n/g, ' ') : '';
+    addProfile(seen, results, `/freelancers/~${id}`, title);
+    if (results.length >= 20) break;
+    match = re.exec(blob);
+  }
+  return results;
+}
+
+function isProfileRecord(value) {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return false;
+  if (typeof value.ciphertext === 'string' || typeof value.profileCiphertext === 'string') return true;
+  return typeof value.profileUrl === 'string' && value.profileUrl.includes('/freelancers/');
+}
+
+function findProfilesInPageState() {
+  const roots = [];
+  try {
+    if (window.__NUXT__) roots.push(window.__NUXT__);
+  } catch (_) {}
+  try {
+    if (window.__NUXT_DATA__) roots.push(window.__NUXT_DATA__);
+  } catch (_) {}
+  try {
+    if (window.$nuxt && window.$nuxt.$store && window.$nuxt.$store.state) {
+      roots.push(window.$nuxt.$store.state);
+    }
+  } catch (_) {}
+  if (roots.length === 0) return [];
+
+  const arrays = [];
+  const seenNodes = new WeakSet();
+  let visited = 0;
+
+  function walk(node, depth) {
+    if (!node || typeof node !== 'object' || depth > 8 || visited > 8000) return;
+    if (seenNodes.has(node)) return;
+    seenNodes.add(node);
+    visited += 1;
+
+    if (Array.isArray(node)) {
+      const hits = [];
+      for (const item of node) {
+        if (isProfileRecord(item)) hits.push(item);
+      }
+      if (hits.length >= 3 && hits.length <= 40 && hits.length / node.length >= 0.5) {
+        arrays.push(hits);
+      }
+      for (const item of node) walk(item, depth + 1);
+      return;
+    }
+
+    let values = [];
+    try {
+      values = Object.values(node);
+    } catch (_) {
+      return;
+    }
+    for (const value of values) {
+      if (value && typeof value === 'object') walk(value, depth + 1);
+    }
   }
 
+  roots.forEach((root) => walk(root, 0));
+  arrays.sort((a, b) => Math.abs(a.length - 10) - Math.abs(b.length - 10));
+  const best = arrays[0] || [];
+  const seen = new Set();
+  const results = [];
+  for (const profile of best) {
+    const cipher = profile.ciphertext || profile.profileCiphertext || '';
+    const fromUrl = typeof profile.profileUrl === 'string' ? profile.profileUrl : '';
+    const href = /~[0-9a-f]{8,}/i.test(cipher) ? `/freelancers/${cipher.startsWith('~') ? cipher : `~${cipher}`}` : fromUrl;
+    const text = profile.title || profile.shortName || profile.name || profile.profileName || '';
+    addProfile(seen, results, href, text);
+  }
   return results;
+}
+
+function findFreelancerProfileLinks() {
+  try {
+    const fromDom = findProfilesInDom();
+    if (fromDom.length > 0) return fromDom;
+  } catch (_) {}
+  try {
+    const fromMarkup = findProfilesInMarkup();
+    if (fromMarkup.length > 0) return fromMarkup;
+  } catch (_) {}
+  try {
+    const fromScripts = findProfilesInScripts();
+    if (fromScripts.length > 0) return fromScripts;
+  } catch (_) {}
+  try {
+    return findProfilesInPageState();
+  } catch (_) {
+    return [];
+  }
+}
+
+function pageLooksBlocked() {
+  const title = document.title || '';
+  const body = normText(document.body && document.body.innerText).slice(0, 600);
+  return /just a moment/i.test(title) || /cloudflare|checking your browser|verify you are human/i.test(body);
+}
+
+function scanTalentSearchPage() {
+  return {
+    links: findFreelancerProfileLinks(),
+    blocked: pageLooksBlocked(),
+  };
 }
 
 /**
@@ -188,11 +393,24 @@ function getUrlForPage(pageNum) {
   return url.toString();
 }
 
-// Listen for messages from popup/background
-chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
-  if (msg.type === 'GET_PROFILE_LINKS') {
-    const links = findFreelancerProfileLinks();
-    sendResponse({ links });
+globalThis.__UW_TALENT_SEARCHER_API__ = {
+  findFreelancerProfileLinks,
+  scanTalentSearchPage,
+  getCurrentPageNumber,
+  getUrlForPage,
+};
+
+// Listen for messages from popup/background.
+// Guarded so injecting this file again (side panel scan on an already-open tab) does not stack listeners.
+if (typeof chrome !== 'undefined' && chrome.runtime && chrome.runtime.onMessage && !globalThis.__UW_TALENT_SEARCHER_LISTENER__) {
+  globalThis.__UW_TALENT_SEARCHER_LISTENER__ = true;
+  chrome.runtime.onMessage.addListener(onExtensionMessage);
+}
+
+function onExtensionMessage(msg, _sender, sendResponse) {
+  if (msg.type === 'GET_PROFILE_LINKS' || msg.type === 'GET_PROFILE_LINKS_V2') {
+    const scan = scanTalentSearchPage();
+    sendResponse(scan);
     return true;
   }
   if (msg.type === 'GET_PAGE_INFO') {
@@ -230,7 +448,8 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
     return true;
   }
   return false;
-});
+}
 
 // No auto-click: only "Open GitHub on all profile tabs" (batch) or popup "Click View profile" trigger the click,
 // so we avoid double-click and "flag set by auto-click blocks batch" issues.
+})();
